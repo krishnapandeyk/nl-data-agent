@@ -14,7 +14,17 @@ import pandas as pd
 from .dataset import Dataset
 from .guards import ValidatedPlan
 from .schema import Filter
-from .tools import aggregate, apply_filters, group_aggregate, missing_count
+from .tools import (
+    aggregate,
+    apply_filters,
+    group_aggregate,
+    missing_count,
+    truncate_period,
+)
+
+# Holds the period labels while grouping by date. Named so it cannot collide
+# with a real column from the CSV.
+PERIOD_COLUMN = "_period"
 
 OP_WORDS = {
     "eq": "=",
@@ -116,17 +126,34 @@ def execute(validated: ValidatedPlan, data: Dataset, question: str) -> Answer:
 
     # 3. Aggregate.
     if plan.group_by:
-        series = group_aggregate(
-            frame, plan.group_by, plan.aggregation, validated.metric
-        )
+        if plan.group_by_period:
+            # Group on period labels ("2026-01") rather than on distinct dates.
+            frame = frame.assign(
+                **{
+                    PERIOD_COLUMN: truncate_period(
+                        frame, plan.group_by, plan.group_by_period
+                    )
+                }
+            )
+            group_key = PERIOD_COLUMN
+            group_label = f"{plan.group_by} truncated to {plan.group_by_period}"
+        else:
+            group_key = plan.group_by
+            group_label = plan.group_by
+
+        series = group_aggregate(frame, group_key, plan.aggregation, validated.metric)
         if plan.sort:
             series = series.sort_values(ascending=(plan.sort == "asc"))
+        elif plan.group_by_period:
+            # Period labels sort as text in calendar order, so Jan, Feb, Mar
+            # rather than whichever month happens to come first alphabetically.
+            series = series.sort_index()
         if plan.limit:
             series = series.head(plan.limit)
         value: Any = {str(k): _round(v) for k, v in series.items()}
 
         target = validated.metric or "rows"
-        steps.append(f"grouped by {plan.group_by}")
+        steps.append(f"grouped by {group_label}")
         steps.append(f"took the {plan.aggregation} of {target} per group")
         if plan.sort:
             steps.append(

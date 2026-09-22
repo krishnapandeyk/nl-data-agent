@@ -228,13 +228,34 @@ def validate_plan(plan: AnalysisPlan, data: Dataset) -> ValidatedPlan:
             raise PlanRejected(
                 f"There is no column called '{plan.group_by}'.", kind="invalid"
             )
-        if group_by not in CATEGORICAL_COLUMNS:
+        if group_by in DATE_COLUMNS:
+            # Every date is distinct, so grouping by the raw column would give
+            # one group per row. A calendar period has to be named.
+            if not plan.group_by_period:
+                raise PlanRejected(
+                    "Grouping by 'date' needs a period: say whether you want it "
+                    "by month, quarter or year.",
+                    kind="clarify",
+                )
+        elif group_by not in CATEGORICAL_COLUMNS:
             raise PlanRejected(
-                f"Grouping by '{group_by}' is not supported; group by one of: "
+                f"Grouping by '{group_by}' is not supported; group by 'date' "
+                "with a period, or one of: "
                 + ", ".join(sorted(CATEGORICAL_COLUMNS)),
                 kind="unsupported",
             )
+        elif plan.group_by_period:
+            raise PlanRejected(
+                f"A period only applies to 'date', not to '{group_by}'.",
+                kind="invalid",
+            )
         plan = plan.model_copy(update={"group_by": group_by})
+    elif plan.group_by_period:
+        raise PlanRejected(
+            "A period was given but nothing was grouped; to group by time, set "
+            "group_by to 'date'.",
+            kind="invalid",
+        )
     else:
         if plan.sort or plan.limit:
             warnings.append(

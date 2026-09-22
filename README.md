@@ -15,6 +15,10 @@ A: 4320.0
    Assumption: 'revenue' is read as net_revenue = units * unit_price * (1 - discount). Ask for 'gross revenue' to exclude the discount.
 ```
 
+**[See a full example run](docs/example-run.md)** — real, unedited terminal
+output from a live session, including a refused request and a question about
+data that does not exist. No API key needed to read it.
+
 The key idea is a strict division of labour. An AI language model (Claude)
 reads your question and decides **what** should be calculated. Ordinary
 Python code then **does** the calculation. The model never sees the data,
@@ -24,6 +28,7 @@ never does any arithmetic, and never supplies a number that reaches you.
 
 ## Contents
 
+- [Example run](docs/example-run.md)
 - [Why it is built this way](#why-it-is-built-this-way)
 - [Getting started](#getting-started)
 - [Using the agent](#using-the-agent)
@@ -133,7 +138,7 @@ If the key is set in both places, the environment variable wins.
 pytest -q
 ```
 
-You should see `32 passed`. The tests run entirely offline and do not use your
+You should see `36 passed`. The tests run entirely offline and do not use your
 API key.
 
 ---
@@ -321,7 +326,8 @@ A plan can contain only these fields:
 | `aggregation` | The calculation | `sum`, `mean`, `median`, `min`, `max`, `count` |
 | `metric` | The column to calculate on | a numeric column, or `revenue` |
 | `filters` | Which rows to keep | column + operator + value |
-| `group_by` | Give one result per group | `region` or `product` |
+| `group_by` | Give one result per group | `region`, `product`, or `date` for results over time |
+| `group_by_period` | With `group_by: "date"`, the calendar period to group into | `month`, `quarter`, `year` |
 | `sort`, `limit` | Order the groups and keep the top few | `asc` / `desc`, a number from 1 to 100 |
 | `message` | An explanation for non-`compute` replies | text |
 | `assumptions` | Choices the model had to make | a list of short notes |
@@ -476,6 +482,8 @@ nl-data-agent/
 │   └── executor.py    runs a checked plan and writes the explanation
 ├── data/
 │   └── transactions.csv
+├── docs/
+│   └── example-run.md   a real session, for readers without an API key
 ├── tests/
 │   └── test_agent.py
 ├── .env.example       template for your .env file
@@ -490,7 +498,7 @@ nl-data-agent/
 pytest -q
 ```
 
-There are 32 tests. They need no API key and no network connection. A stand-in
+There are 36 tests. They need no API key and no network connection. A stand-in
 planner supplies fixed plans, so everything after the model (validation,
 calculation and explanation) is tested exactly as it runs for real.
 
@@ -498,6 +506,8 @@ The tests cover:
 
 - every calculation type, compared against figures worked out by hand
 - date-range filters, combined filters and case-insensitive matching
+- grouping by month and by quarter, and refusing a date grouping with no
+  period named
 - empty results and missing values
 - made-up columns, impossible calculations and unknown plan fields
 - merging the model's assumptions with the agent's own
@@ -513,8 +523,6 @@ in the tests are themselves correct.
 
 ## Limitations
 
-- **Grouping works only on text columns** (`region`, `product`). Grouping by
-  month would need a date-rounding operation that does not exist yet.
 - **One question, one calculation.** There are no joins, running totals or
   multi-step analyses.
 - **The prescreen uses simple pattern matching.** It is deliberately strict
@@ -532,7 +540,6 @@ in the tests are themselves correct.
 
 ## Possible extensions
 
-- A date-rounding operation, for results by month or by quarter.
 - Multi-step plans, so a question like "how did UK revenue change month on
   month?" becomes a sequence of checked operations.
 - A store of previous plans, so repeated questions can skip the model

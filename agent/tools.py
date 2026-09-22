@@ -62,6 +62,33 @@ def apply_filters(frame: pd.DataFrame, filters: List[Filter]) -> pd.DataFrame:
     return result
 
 
+def truncate_period(frame: pd.DataFrame, column: str, period: str) -> pd.Series:
+    """Label each row with the calendar period its date falls in.
+
+    "2026-01" for month, "2026-Q1" for quarter, "2026" for year. The labels
+    sort chronologically as plain text, which is what the executor relies on.
+    Unreadable dates become NA rather than a bogus label.
+    """
+    stamps = pd.to_datetime(frame[column], errors="coerce")
+    labels = pd.Series(pd.NA, index=frame.index, dtype="object")
+    known = stamps.notna()
+
+    if period == "month":
+        labels[known] = stamps[known].dt.strftime("%Y-%m")
+    elif period == "quarter":
+        labels[known] = (
+            stamps[known].dt.year.astype(str)
+            + "-Q"
+            + stamps[known].dt.quarter.astype(str)
+        )
+    elif period == "year":
+        labels[known] = stamps[known].dt.strftime("%Y")
+    else:  # unreachable: schema.Period is a closed set
+        raise ValueError(f"Unsupported period: {period}")
+
+    return labels
+
+
 def count_rows(frame: pd.DataFrame) -> int:
     """How many rows survived the filters."""
     return int(len(frame))
@@ -101,6 +128,7 @@ def missing_count(frame: pd.DataFrame, metric: str | None) -> int:
 
 TOOLS: Dict[str, Callable[..., Any]] = {
     "apply_filters": apply_filters,
+    "truncate_period": truncate_period,
     "count_rows": count_rows,
     "aggregate": aggregate,
     "group_aggregate": group_aggregate,

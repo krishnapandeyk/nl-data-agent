@@ -229,6 +229,44 @@ def test_date_range_filter(data):
     assert answer_for(data, plan).value == pytest.approx(5100.0)
 
 
+def test_monthly_revenue(data):
+    plan = AnalysisPlan(
+        action="compute", aggregation="sum", metric="revenue",
+        group_by="date", group_by_period="month",
+    )
+    result = answer_for(data, plan)
+    assert result.value == {"2026-01": 4620.0, "2026-02": 5100.0, "2026-03": 3550.0}
+    # Chronological by default, not alphabetical and not by size.
+    assert list(result.value) == ["2026-01", "2026-02", "2026-03"]
+    assert "truncated to month" in result.explanation
+
+
+def test_quarterly_revenue(data):
+    plan = AnalysisPlan(
+        action="compute", aggregation="sum", metric="revenue",
+        group_by="date", group_by_period="quarter",
+    )
+    assert answer_for(data, plan).value == {"2026-Q1": 13270.0}
+
+
+def test_grouping_by_date_needs_a_period(data):
+    plan = AnalysisPlan(
+        action="compute", aggregation="sum", metric="revenue", group_by="date"
+    )
+    with pytest.raises(PlanRejected) as exc:
+        validate_plan(plan, data)
+    assert exc.value.kind == "clarify"
+
+
+def test_period_without_a_date_grouping_is_rejected(data):
+    plan = AnalysisPlan(
+        action="compute", aggregation="sum", metric="revenue",
+        group_by="region", group_by_period="month",
+    )
+    with pytest.raises(PlanRejected):
+        validate_plan(plan, data)
+
+
 def test_combined_filters(data):
     plan = AnalysisPlan(
         action="compute", aggregation="sum", metric="units",
@@ -299,6 +337,10 @@ def test_expected_figures_match_plain_pandas(data):
         {"UK": 1210.0, "DE": 1800.0, "FR": 1200.0}
     )
     assert feb["net"].sum() == pytest.approx(5100.0)
+    assert tx.groupby(tx["date"].dt.strftime("%Y-%m"))["net"].sum().to_dict() == (
+        pytest.approx({"2026-01": 4620.0, "2026-02": 5100.0, "2026-03": 3550.0})
+    )
+    assert tx["net"].sum() == pytest.approx(13270.0)  # the only quarter present
     assert uk.loc[uk["product"] == "Alpha", "units"].sum() == 13
     assert (tx["region"] == "UK").sum() == 4
 

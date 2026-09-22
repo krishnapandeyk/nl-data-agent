@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 FilterOp = Literal["eq", "neq", "in", "gt", "gte", "lt", "lte", "between"]
 Aggregation = Literal["sum", "mean", "median", "min", "max", "count"]
+Period = Literal["month", "quarter", "year"]
 Action = Literal["compute", "clarify", "refuse", "unsupported"]
 
 FilterValue = Union[str, float, int, bool, List[Union[str, float, int]]]
@@ -49,6 +50,9 @@ class AnalysisPlan(BaseModel):
     metric: Optional[str] = None
     filters: List[Filter] = Field(default_factory=list)
     group_by: Optional[str] = None
+    # Only meaningful with group_by "date": the calendar period each date is
+    # rounded down to before grouping.
+    group_by_period: Optional[Period] = None
     sort: Optional[Literal["asc", "desc"]] = None
     limit: Optional[int] = Field(default=None, ge=1, le=100)
     message: Optional[str] = None
